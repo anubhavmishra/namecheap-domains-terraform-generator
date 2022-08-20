@@ -1,0 +1,10 @@
+# Project related
+namecheap-domains-terraform-generator
+
+# Terraform related
+terraform
+.terraform
+*.tf
+
+# Other things
+.env
