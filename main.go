@@ -99,6 +99,7 @@ func main() {
 	file, _ := os.Create(fileName)
 	defer file.Close()
 
+	terraformImportCommands := []string{}
 	for i, d := range *domains.Domains {
 		response, err := client.DomainsDNS.GetList(*d.Name)
 		if err != nil {
@@ -113,6 +114,24 @@ func main() {
 		if err != nil {
 			log.Fatalf("error rendering domain resource: %v\n", err)
 		}
+		// Append terraform import command
+		terraformImportCommands = append(terraformImportCommands,
+			fmt.Sprintf("terraform import namecheap_domain_records.%s %s",
+				domain.ResourceName,
+				domain.Name,
+			),
+		)
+	}
+
+	log.Println("-> Successfully wrote all domain resources")
+	fmt.Printf("\nFile saved: %q\n", file.Name())
+
+	// Show terraform import command if any
+	if len(terraformImportCommands) > 0 {
+		fmt.Printf("Terraform import command for the resources are as follows:\n\n")
+		for _, c := range terraformImportCommands {
+			fmt.Println(c)
+		}
 	}
 }
 
@@ -126,6 +145,8 @@ func renderTemplate(domain *Domain, f *os.File) error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("-> Wrote terraform resource for %q domain\n", domain.Name)
 
 	return nil
 }
