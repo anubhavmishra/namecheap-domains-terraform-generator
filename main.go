@@ -95,32 +95,42 @@ func main() {
 		os.Exit(1)
 	}
 
-	// create a new file
+	// Create a new file
 	file, _ := os.Create(fileName)
 	defer file.Close()
 
 	terraformImportCommands := []string{}
 	for i, d := range *domains.Domains {
-		response, err := client.DomainsDNS.GetList(*d.Name)
+
+		// Check if domain is using namecheap dns for dns management
+		namecheapDNS, err := usingNamecheapDNSManagement(client, *d.Name)
 		if err != nil {
-			log.Fatalf("error listing domain name %q from namecheap: %v\n", *d.Name, err)
+			log.Fatalf("error getting domain name %q info from namecheap: %v\n", *d.Name, err)
 		}
-		domain := Domain{
-			Name:         *d.Name,
-			Nameservers:  *response.DomainDNSGetListResult.Nameservers,
-			ResourceName: fmt.Sprintf("domain_%s_%d", strings.Replace(*d.Name, ".", "_", -2), i+1),
+		// Generate terraform resources for domains that don't use namecheap dns management
+		// TODO: extend support for domains that use namecheap dns for dns management
+		if !namecheapDNS {
+			response, err := client.DomainsDNS.GetList(*d.Name)
+			if err != nil {
+				log.Fatalf("error listing domain name %q from namecheap: %v\n", *d.Name, err)
+			}
+			domain := Domain{
+				Name:         *d.Name,
+				Nameservers:  *response.DomainDNSGetListResult.Nameservers,
+				ResourceName: fmt.Sprintf("domain_%s_%d", strings.Replace(*d.Name, ".", "_", -2), i+1),
+			}
+			err = renderTemplate(&domain, file)
+			if err != nil {
+				log.Fatalf("error rendering domain resource: %v\n", err)
+			}
+			// Append terraform import command
+			terraformImportCommands = append(terraformImportCommands,
+				fmt.Sprintf("terraform import namecheap_domain_records.%s %s",
+					domain.ResourceName,
+					domain.Name,
+				),
+			)
 		}
-		err = renderTemplate(&domain, file)
-		if err != nil {
-			log.Fatalf("error rendering domain resource: %v\n", err)
-		}
-		// Append terraform import command
-		terraformImportCommands = append(terraformImportCommands,
-			fmt.Sprintf("terraform import namecheap_domain_records.%s %s",
-				domain.ResourceName,
-				domain.Name,
-			),
-		)
 	}
 
 	log.Println("-> Successfully wrote all domain resources")
@@ -149,4 +159,19 @@ func renderTemplate(domain *Domain, f *os.File) error {
 	log.Printf("-> Wrote terraform resource for %q domain\n", domain.Name)
 
 	return nil
+}
+
+func usingNamecheapDNSManagement(client *namecheap.Client, name string) (bool, error) {
+	responseInfo, err := client.Domains.GetInfo(name)
+	if err != nil {
+		return false, err
+	}
+
+	if responseInfo != nil {
+		if responseInfo.DomainDNSGetListResult != nil {
+			return *responseInfo.DomainDNSGetListResult.DnsDetails.IsUsingOurDNS, nil
+		}
+	}
+
+	return false, nil
 }

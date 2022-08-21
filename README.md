@@ -1,6 +1,8 @@
 # namecheap-domains-terraform-generator
 Fetches Namecheap domains and generates Terraform configuration
 
+**Note: Currently, the project only supports domains that don't use Namecheap DNS for DNS management.**
+
 ## Usage
 
 Set environment variables
